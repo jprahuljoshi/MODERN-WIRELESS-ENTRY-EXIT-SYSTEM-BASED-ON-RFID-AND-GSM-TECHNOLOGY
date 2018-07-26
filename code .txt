@@ -1,0 +1,168 @@
+#define F_CPU 8000000UL
+
+#include<avr/io.h>
+#include<stdio.h>
+#include<util/delay.h>
+#include<string.h>
+
+
+int x=0,i=0,k=0,j=0;
+
+char card1[]="02003ED7F318";
+char card[];
+char msg1[]="PLACE UR CARD";
+char msg2[]="ACCESS GRANTED";
+char msg3[]="ACCESS DENIED";
+char msg4[]="WELCOME";
+char msg5[]="GSM INITIALISED"
+char msg6[]="MSG SENT"
+
+ 
+void lcd_command(unsigned char cmd)
+{
+	PORTD = (cmd & 0xF0);		//MSB
+	PORTC |= 0b00000100;		//en=1
+	_delay_ms(1);
+	PORTC &= 0b11110000;				//en=0
+	_delay_ms(1);
+
+	PORTD = ((cmd<<4) & 0xF0);		//LSB
+	PORTC |= 0b00000100;		//en=1
+	_delay_ms(1);
+	PORTC &= 0b11110000;				//en=0
+}
+
+
+void lcd_data(unsigned char da)
+{
+	PORTD = (da & 0xF0);		//MSB
+	PORTC |= 0b00000101;		//en=1
+	_delay_ms(1);
+	PORTC &= 0b11110001;				//en=0
+	_delay_ms(1);
+
+	PORTD = ((da<<4) & 0xF0);		//LSB
+	PORTC |= 0b00000101;		//en=1
+	_delay_ms(1);
+	PORTC &= 0b11110001;				//en=0
+}
+
+
+void lcd_init()
+{
+	lcd_command(0x02);
+	lcd_command(0x60);
+	lcd_command(0x28);
+	lcd_command(0x0C);
+}
+
+void lcd_string(unsigned char a[])
+{
+	while(a[i]!='\0')
+	{
+		lcd_data(a[i]);
+		i++;
+	}
+}
+
+
+void usart_init()	//Uart initialisation transmission and recieving
+{
+	UBRRL=51;
+	UCSRB=UCSRB|(1<<RXEN)|(1<<TXEN);
+	UCSRC=UCSRC|(1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0);
+}
+
+void getcard_id(void)	//Function to get 12 byte ID no. from rfid card
+{	
+	for(i=0;i<12;i++) 
+	{
+		card[i]= usart_getch();	// receive card value byte by byte
+	}
+}
+
+int usart_getch()
+{
+	while ((UCSRA & (1 << RXC)) == 0); // Do nothing until data has been received and is ready to be read from UDR
+	return(UDR); // return the byte
+}
+
+void pir_home()
+{
+	if(PINC==0b00010000)
+	{
+		PORTC=0b00001000;
+
+	}
+}
+
+void pir_theft()
+{
+	if(PINC==0b00010000)
+	{
+		gsm();
+		
+	}
+}
+
+void gsm()
+{
+	putsf("AT");
+        enter();
+        _delay_ms(100);
+        _putsf("ATE0");                //When the board is reset, configuration changes from the last session are loaded*/
+        enter();
+        _delay_ms(100);
+        putsf("AT+CMGF=1");           //select sms format
+        enter();
+        _delay_ms(100);
+        putsf("AT+CNMI=1,1,0,0,0");   
+        enter();
+        _delay_ms(100); 
+	putsf("AT+CMGS=\"08619615585\"");     //Send SMS Message To Given Number
+        enter(); 
+        _delay_ms(100);
+        putsf("Alert!");            //Message to be Sent
+        enter();
+	_delay_ms(100);
+}
+
+int main(void)
+{
+	DDRC=DDRC|(1<<1)|(1<<0)|(1<<2)|(1<<3);		//LCD_DATA port as output port
+	DDRD= 0xF0;		
+	lcd_init();		//initialization of LCD
+	_delay_ms(50);		// delay of 50 milliseconds
+	usart_init();		// initiailztion of USART
+	while(1)
+	{
+		lcd_command(0x80);		//cursor on 1st line
+		lcd_string(msg4[]);	//Function to display string on LCD
+		_delay_ms(100);			//cursor on 2nd line
+		lcd_command(0xC0);
+		lcd_string(msg5[]);		
+		lcd_string(msg1[]);
+		
+		getcard_id();	// Function to get RFID card no. from serial port
+		
+				
+
+		if(strcmp(card1,card)==0) //check whether card matched
+		{
+			lcd_command(0x80);	//cursor on 1st line
+			lcd_string(msg2[]);
+			pir_home();		}
+
+		else		//card does not match
+		{
+			lcd_command(0x80);
+			lcd_string(msg3[]);
+			pir_theft();
+			lcd_string(msg6[]);
+		}
+	}
+	
+	return 0;
+}		
+	
+	
